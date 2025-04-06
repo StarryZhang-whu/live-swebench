@@ -5,11 +5,19 @@
 import argparse
 import os
 import traceback
+import json
+from fire import Fire
 
 from dotenv import load_dotenv
 from multiprocessing import Pool
-from swebench.collect.build_dataset import main as build_dataset
-from swebench.collect.print_pulls import main as print_pulls
+from swebench.collect.utils import Repo
+from swebench.collect.build_dataset import (
+    create_instance,
+    is_valid_pull,
+    is_valid_instance,
+    has_test_patch,
+)
+from swebench.collect.print_pulls import get_pull_batches
 
 
 load_dotenv()
@@ -40,67 +48,100 @@ def split_instances(input_list: list, n: int) -> list:
 
 def construct_data_files(data: dict):
     """
-    Logic for combining multiple .all PR files into a single fine tuning dataset
-
-    Args:
-        data (dict): Dictionary containing the following keys:
-            repos (list): List of repositories to retrieve instruction data for
-            path_prs (str): Path to save PR data files to
-            path_tasks (str): Path to save task instance data files to
-            token (str): GitHub token to use for API requests
+    Logic for:
+      - For each repo in data["repos"], gather PRs in batches of 100.
+      - Write each pull to the repo's PR JSONL file as soon as it arrives.
+      - Build tasks from those pulls and write them to a tasks JSONL file.
+      - If `max_tasks` is reached, stop early.
     """
-    repos, path_prs, path_tasks, max_pulls, cutoff_date, token = (
-        data["repos"],
-        data["path_prs"],
-        data["path_tasks"],
-        data["max_pulls"],
-        data["cutoff_date"],
-        data["token"],
-    )
-    for repo in repos:
-        repo = repo.strip(",").strip()
-        repo_name = repo.split("/")[1]
+    repos = data["repos"]
+    path_prs = data["path_prs"]
+    path_tasks = data["path_tasks"]
+    max_pulls = data["max_pulls"]
+    cutoff_date = data["cutoff_date"]
+    token = data["token"]
+    max_tasks = data["max_tasks"]
+
+    for repo_name in repos:
+        repo_name = repo_name.strip(",").strip()
+        file_prefix = repo_name.replace("/", "_")
+
         try:
-            path_pr = os.path.join(path_prs, f"{repo_name}-prs.jsonl")
+            path_pr = os.path.join(path_prs, f"{file_prefix}-prs.jsonl")
+            path_task = os.path.join(path_tasks, f"{file_prefix}-task-instances.jsonl")
+
             if cutoff_date:
                 path_pr = path_pr.replace(".jsonl", f"-{cutoff_date}.jsonl")
-            if not os.path.exists(path_pr):
-                print(f"Pull request data for {repo} not found, creating...")
-                print_pulls(
-                    repo, path_pr, token, max_pulls=max_pulls, cutoff_date=cutoff_date
-                )
-                print(f"✅ Successfully saved PR data for {repo} to {path_pr}")
-            else:
-                print(
-                    f"📁 Pull request data for {repo} already exists at {path_pr}, skipping..."
-                )
+                path_task = path_task.replace(".jsonl", f"-{cutoff_date}.jsonl")
 
-            path_task = os.path.join(path_tasks, f"{repo_name}-task-instances.jsonl")
-            if not os.path.exists(path_task):
-                print(f"Task instance data for {repo} not found, creating...")
-                build_dataset(path_pr, path_task, token)
-                print(
-                    f"✅ Successfully saved task instance data for {repo} to {path_task}"
-                )
+            # Check existence
+            if os.path.exists(path_pr):
+                print(f"📁 Pull request data for {repo_name} already exists at {path_pr}, skipping re-download...")
+            if os.path.exists(path_task):
+                print(f"📁 Task data for {repo_name} already exists at {path_task}, skipping re-build...")
+
+            if not os.path.exists(path_pr) or not os.path.exists(path_task):
+                print(f"Collecting PRs for {repo_name} in batches...")
+
+                # Open files in append mode so we can safely add new lines
+                pr_f_mode = "a" if os.path.exists(path_pr) else "w"
+                task_f_mode = "a" if os.path.exists(path_task) else "w"
+
+                with open(path_pr, pr_f_mode) as pr_file, open(path_task, task_f_mode) as task_file:
+                    # Prepare GH Repo object
+                    owner, short = repo_name.split("/")
+                    gh_repo = Repo(owner, short, token=token)
+
+                    total_pulls_used = 0
+                    total_tasks_created = 0
+
+                    for batch in get_pull_batches(gh_repo, max_pulls=max_pulls, cutoff_date=cutoff_date, batch_size=10):
+                        for pull in batch:
+                            # Write the raw pull to the .jsonl file
+                            pr_file.write(json.dumps(pull) + "\n")
+                            total_pulls_used += 1
+
+                            if is_valid_pull(pull):
+                                instance = create_instance(gh_repo, pull)
+                                if has_test_patch(instance):
+                                    task_file.write(json.dumps(instance) + "\n")
+                                    total_tasks_created += 1
+
+                            if max_tasks is not None and total_tasks_created >= max_tasks:
+                                print(
+                                    f"🚨 Reached max_tasks={max_tasks} for {repo_name}. "
+                                    f"Stopping after {total_pulls_used} pulls."
+                                )
+                                break
+
+                        if max_tasks is not None and total_tasks_created >= max_tasks:
+                            break
+
+                    print(
+                        f"✅ Done collecting for {repo_name}. "
+                        f"Used {total_pulls_used} pulls, created {total_tasks_created} tasks."
+                    )
             else:
-                print(
-                    f"📁 Task instance data for {repo} already exists at {path_task}, skipping..."
-                )
+                print(f"Skipping {repo_name} because its data files already exist.")
+
         except Exception as e:
             print("-" * 80)
-            print(f"Something went wrong for {repo}, skipping: {e}")
+            print(f"Something went wrong for {repo_name}, skipping: {e}")
             print("Here is the full traceback:")
             traceback.print_exc()
             print("-" * 80)
 
 
+
 def main(
-    repos: list,
-    path_prs: str,
-    path_tasks: str,
-    max_pulls: int = None,
-    cutoff_date: str = None,
-):
+        repos_list: str,
+        tokens_file: str,
+        path_prs: str,
+        path_tasks: str,
+        max_tasks: int = None,
+        max_pulls: int = None,
+        cutoff_date: str = None,
+    ):
     """
     Spawns multiple threads given multiple GitHub tokens for collecting fine tuning data
 
@@ -110,17 +151,18 @@ def main(
         path_tasks (str): Path to save task instance data files to
         cutoff_date (str): Cutoff date for PRs to consider in format YYYYMMDD
     """
+    with open(repos_list, "r") as f:
+        repos_data = [json.loads(line) for line in f.readlines()]
+    repos = [repo["full_name"] for repo in repos_data]
+
     path_prs, path_tasks = os.path.abspath(path_prs), os.path.abspath(path_tasks)
     print(f"Will save PR data to {path_prs}")
     print(f"Will save task instance data to {path_tasks}")
-    print(f"Received following repos to create task instances for: {repos}")
+    print(f"Received {len(repos)} repos to create task instances for:\n{repos}")
 
-    tokens = os.getenv("GITHUB_TOKENS")
-    if not tokens:
-        raise Exception(
-            "Missing GITHUB_TOKENS, consider rerunning with GITHUB_TOKENS=$(gh auth token)"
-        )
-    tokens = tokens.split(",")
+    with open(tokens_file, "r") as f:
+        tokens = [line.strip() for line in f.readlines() if line.strip()]
+
     data_task_lists = split_instances(repos, len(tokens))
 
     data_pooled = [
@@ -128,6 +170,7 @@ def main(
             "repos": repos,
             "path_prs": path_prs,
             "path_tasks": path_tasks,
+            "max_tasks": max_tasks,
             "max_pulls": max_pulls,
             "cutoff_date": cutoff_date,
             "token": token,
@@ -140,28 +183,4 @@ def main(
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument(
-        "--repos",
-        nargs="+",
-        help="List of repositories (e.g., `sqlfluff/sqlfluff`) to create task instances for",
-    )
-    parser.add_argument(
-        "--path_prs", type=str, help="Path to folder to save PR data files to"
-    )
-    parser.add_argument(
-        "--path_tasks",
-        type=str,
-        help="Path to folder to save task instance data files to",
-    )
-    parser.add_argument(
-        "--max_pulls", type=int, help="Maximum number of pulls to log", default=None
-    )
-    parser.add_argument(
-        "--cutoff_date",
-        type=str,
-        help="Cutoff date for PRs to consider in format YYYYMMDD",
-        default=None,
-    )
-    args = parser.parse_args()
-    main(**vars(args))
+    Fire(main)

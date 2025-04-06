@@ -10,14 +10,66 @@ import logging
 import os
 
 from datetime import datetime
+from contextlib import contextmanager
 from fastcore.xtras import obj2dict
 from swebench.collect.utils import Repo
-from typing import Optional
+from typing import Optional, Iterator, List
 
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger(__name__)
+
+def get_pull_batches(
+    repo: Repo,
+    max_pulls: int = None,
+    cutoff_date: str = None,
+    batch_size: int = 10,
+) -> Iterator[List[dict]]:
+    """
+    Context manager that yields lists (batches) of up to `batch_size` pulls each.
+    Stops early if `max_pulls` is reached or if `cutoff_date` is exceeded.
+
+    Example usage:
+        with get_pull_batches(repo, max_pulls=500) as batches:
+            for pulls_batch in batches:
+                # do something with up to 100 pulls
+                pass
+    """
+    # Convert string cutoff_date into datetime for comparison, or None
+    if cutoff_date is not None:
+        cutoff_date = datetime.strptime(str(cutoff_date), "%Y%m%d").strftime("%Y-%m-%dT%H:%M:%SZ")
+
+    pulls_batch = []
+    pulled_count = 0
+
+    try:
+        for pull in repo.get_all_pulls():
+            # If the pull is older than cutoff_date, break
+            if cutoff_date is not None and pull.created_at < cutoff_date:
+                break
+            
+            setattr(pull, "resolved_issues", repo.extract_resolved_issues(pull))
+
+            pulls_batch.append(obj2dict(pull))
+            pulled_count += 1
+
+            # If we have filled a batch, yield it
+            if len(pulls_batch) == batch_size:
+                yield pulls_batch
+                pulls_batch = []
+
+            # If we've reached max_pulls, break
+            if max_pulls is not None and pulled_count >= max_pulls:
+                break
+
+        # Yield any leftover pulls
+        if pulls_batch:
+            yield pulls_batch
+
+    finally:
+        # If needed, you can close resources here. For now we have none.
+        pass
 
 
 def log_all_pulls(
@@ -33,11 +85,9 @@ def log_all_pulls(
         repo (Repo): repository object
         output (str): output file name
     """
-    cutoff_date = (
-        datetime.strptime(cutoff_date, "%Y%m%d").strftime("%Y-%m-%dT%H:%M:%SZ")
-        if cutoff_date is not None
-        else None
-    )
+    cutoff_date = datetime.strptime(str(cutoff_date), "%Y%m%d") \
+        .strftime("%Y-%m-%dT%H:%M:%SZ") \
+        if cutoff_date is not None else None
 
     with open(output, "w") as file:
         for i_pull, pull in enumerate(repo.get_all_pulls()):
