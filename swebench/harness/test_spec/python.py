@@ -300,8 +300,8 @@ def make_eval_script_list_py(
         ]
     )
     eval_commands = [
-        "source /opt/miniconda3/bin/activate",
-        f"conda activate {env_name}",
+        # "source /opt/miniconda3/bin/activate",
+        # f"conda activate {env_name}",
         f"cd {repo_directory}",
     ]
     if "eval_commands" in specs:
@@ -313,11 +313,9 @@ def make_eval_script_list_py(
         "git status",
         "git show",
         f"git -c core.fileMode=false diff {base_commit}",
-        "source /opt/miniconda3/bin/activate",
-        f"conda activate {env_name}",
     ]
-    if "install" in specs:
-        eval_commands.append(specs["install"])
+    # if "install" in specs:
+    #     eval_commands.append(specs["install"])
     eval_commands += [
         reset_tests_command,
         apply_test_patch_command,
