@@ -47,7 +47,11 @@ def get_logs_eval(test_spec: TestSpec, log_fp: str) -> tuple[dict[str, str], boo
     """
     repo = test_spec.repo
     version = test_spec.version
-    log_parser = MAP_REPO_TO_PARSER[repo]
+    if test_spec.log_parser:
+        # If a custom log parser is provided, use it
+        log_parser = test_spec.log_parser
+    else:
+        log_parser = MAP_REPO_TO_PARSER[repo]
     test_cmd = MAP_REPO_VERSION_TO_SPECS[repo][version]["test_cmd"]
     if isinstance(test_cmd, list):
         test_cmd = test_cmd[-1]
@@ -74,7 +78,7 @@ def get_logs_eval(test_spec: TestSpec, log_fp: str) -> tuple[dict[str, str], boo
 
         # Get status map of evaluation results
         content = content.split(START_TEST_OUTPUT)[1].split(END_TEST_OUTPUT)[0]
-        return log_parser(content, test_spec), True
+        return log_parser(content), True
 
 
 def get_eval_tests_report(

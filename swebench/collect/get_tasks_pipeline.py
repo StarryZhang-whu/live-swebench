@@ -81,7 +81,7 @@ def construct_data_files(data: dict):
                 print(f"📁 Task data for {repo_name} already exists at {path_task}, skipping re-build...")
 
             if not os.path.exists(path_pr) or not os.path.exists(path_task):
-                print(f"Collecting PRs for {repo_name} in batches...")
+                print(f"Collecting PRs for {repo_name}")
 
                 # Open files in append mode so we can safely add new lines
                 pr_f_mode = "a" if os.path.exists(path_pr) else "w"
@@ -153,7 +153,7 @@ def main(
     """
     with open(repos_list, "r") as f:
         repos_data = [json.loads(line) for line in f.readlines()]
-    repos = [repo["full_name"] for repo in repos_data]
+    repos = [repo["full_name"] for repo in repos_data if "microsoft" not in repo["full_name"]]
 
     path_prs, path_tasks = os.path.abspath(path_prs), os.path.abspath(path_tasks)
     print(f"Will save PR data to {path_prs}")

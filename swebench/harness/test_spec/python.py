@@ -291,14 +291,19 @@ def make_eval_script_list_py(
     apply_test_patch_command = (
         f"git apply -v - <<'{HEREDOC_DELIMITER}'\n{test_patch}\n{HEREDOC_DELIMITER}"
     )
-    test_command = " ".join(
-        [
-            MAP_REPO_VERSION_TO_SPECS[instance["repo"]][instance["version"]][
-                "test_cmd"
-            ],
-            *get_test_directives(instance),
-        ]
-    )
+
+    if not instance.get("test_cmds"):
+        test_commands = [" ".join(
+            [
+                MAP_REPO_VERSION_TO_SPECS[instance["repo"]][instance["version"]][
+                    "test_cmd"
+                ],
+                *get_test_directives(instance),
+            ]
+        )]
+    else:
+        test_commands = instance["test_cmds"]
+    
     eval_commands = [
         # "source /opt/miniconda3/bin/activate",
         # f"conda activate {env_name}",
@@ -320,7 +325,8 @@ def make_eval_script_list_py(
         reset_tests_command,
         apply_test_patch_command,
         f": '{START_TEST_OUTPUT}'",
-        test_command,
+        # add test commands
+        *test_commands,
         f": '{END_TEST_OUTPUT}'",
         reset_tests_command,  # Revert tests after done, leave the repo in the same state as before
     ]

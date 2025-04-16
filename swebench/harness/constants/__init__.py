@@ -2,7 +2,7 @@ from enum import Enum
 from pathlib import Path
 from swebench.harness.constants.javascript import *
 from swebench.harness.constants.python import *
-from typing import TypedDict
+from typing import TypedDict, List
 
 
 # Constants - Evaluation Log Directories
@@ -24,6 +24,8 @@ class SWEbenchInstance(TypedDict):
     hints_text: str
     created_at: str
     version: str
+    test_cmds: list[str]
+    log_parser: str
     FAIL_TO_PASS: str
     PASS_TO_PASS: str
     environment_setup_commit: str
@@ -63,10 +65,11 @@ KEY_PREDICTION = "model_patch"
 # Constants - Harness
 DOCKER_PATCH = "/tmp/patch.diff"
 DOCKER_USER = "root"
-DOCKER_WORKDIR = "/testbed"
+DOCKER_WORKDIR = "/workspace"
 LOG_REPORT = "report.json"
 LOG_INSTANCE = "run_instance.log"
 LOG_TEST_OUTPUT = "test_output.txt"
+LOG_PRE_TEST_OUTPUT = "pre_test_output.txt"
 UTF8 = "utf-8"
 
 # Constants - Logging

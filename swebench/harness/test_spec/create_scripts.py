@@ -43,7 +43,10 @@ def make_eval_script_list(
     """
     Applies the test patch and runs the tests.
     """
-    ext = MAP_REPO_TO_EXT[instance["repo"]]
+    if instance["repo"] in MAP_REPO_TO_EXT:
+        ext = MAP_REPO_TO_EXT[instance["repo"]]
+    else:
+        ext = "py"
     func = {
         "js": make_eval_script_list_js,
         "py": make_eval_script_list_py,
