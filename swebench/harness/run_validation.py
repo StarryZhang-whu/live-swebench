@@ -340,23 +340,21 @@ def run_instances(
             instances,
         )
     )
-
-    # print number of existing instance images
-    instance_image_ids = {x.instance_image_key for x in test_specs}
-    existing_images = {
+    
+    existing_images = [
         tag
         for i in client.images.list(all=True)
         for tag in i.tags
-        if tag in instance_image_ids
-    }
-    if not force_rebuild and len(existing_images):
-        print(
-            f"Found {len(existing_images)} existing instance images. Will reuse them."
-        )
+    ]
+
+    todo_specs = []
+    for test_spec in test_specs:
+        if test_spec.instance_image_key in existing_images:
+            todo_specs.append(test_spec)
 
     # run instances in parallel
     payloads = []
-    for test_spec in test_specs:
+    for test_spec in todo_specs:
         payloads.append(
             (
                 instances_map[test_spec.instance_id],
@@ -377,7 +375,7 @@ def run_instances(
         )
 
     # run instances in parallel
-    print(f"Running {len(instances)} instances...")
+    print(f"Running {len(todo_specs)} instances...")
     run_threadpool(run_instance, payloads, max_workers)
     print("All instances run.")
 
