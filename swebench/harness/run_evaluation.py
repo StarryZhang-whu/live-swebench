@@ -297,8 +297,6 @@ def run_instances(
             instances,
         )
     )
-
-    # print number of existing instance images
     instance_image_ids = {x.instance_image_key for x in test_specs}
     existing_images = {
         tag
@@ -333,7 +331,7 @@ def run_instances(
         )
 
     # run instances in parallel
-    print(f"Running {len(instances)} instances...")
+    print(f"Running {len(test_specs)} instances...")
     run_threadpool(run_instance, payloads, max_workers)
     print("All instances run.")
 
