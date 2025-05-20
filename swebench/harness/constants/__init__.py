@@ -65,7 +65,7 @@ KEY_PREDICTION = "model_patch"
 # Constants - Harness
 DOCKER_PATCH = "/tmp/patch.diff"
 DOCKER_USER = "root"
-DOCKER_WORKDIR = "/workspace"
+DOCKER_WORKDIR = "/testbed"
 LOG_REPORT = "report.json"
 LOG_INSTANCE = "run_instance.log"
 LOG_TEST_OUTPUT = "test_output.txt"

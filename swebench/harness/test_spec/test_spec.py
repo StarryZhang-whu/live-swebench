@@ -195,7 +195,7 @@ def make_test_spec(
     pass_to_pass = _from_json_or_obj("PASS_TO_PASS")
     fail_to_pass = _from_json_or_obj("FAIL_TO_PASS")
 
-    env_name = "workspace"
+    env_name = "testbed"
     repo_directory = f"/{env_name}"
 
     specs = {}

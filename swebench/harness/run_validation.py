@@ -340,17 +340,8 @@ def run_instances(
             instances,
         )
     )
-    
-    existing_images = [
-        tag
-        for i in client.images.list(all=True)
-        for tag in i.tags
-    ]
 
-    todo_specs = []
-    for test_spec in test_specs:
-        if test_spec.instance_image_key in existing_images:
-            todo_specs.append(test_spec)
+    todo_specs = test_specs
 
     # run instances in parallel
     payloads = []
@@ -360,12 +351,7 @@ def run_instances(
                 instances_map[test_spec.instance_id],
                 test_spec,
                 predictions[test_spec.instance_id],
-                should_remove(
-                    test_spec.instance_image_key,
-                    cache_level,
-                    clean,
-                    existing_images,
-                ),
+                False,
                 force_rebuild,
                 client,
                 run_id,
@@ -518,20 +504,14 @@ def main(
     dataset = get_dataset_from_preds(
         dataset_name, split, instance_ids, predictions, run_id, rewrite_reports
     )
-    full_dataset = load_swebench_dataset(dataset_name, split, instance_ids)
 
     # run instances locally
     if platform.system() == "Linux":
         resource.setrlimit(resource.RLIMIT_NOFILE, (open_file_limit, open_file_limit))
-    client = docker.from_env()
 
-    existing_images = list_images(client)
     if not dataset:
         print("No instances to run.")
     else:
-        # build environment images + run instances
-        if namespace is None and not rewrite_reports:
-            build_env_images(client, dataset, force_rebuild, max_workers)
         run_instances(
             predictions,
             dataset,

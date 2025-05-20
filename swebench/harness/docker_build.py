@@ -477,6 +477,11 @@ def build_container(
         run_args = test_spec.docker_specs.get("run_args", {})
         cap_add = run_args.get("cap_add", [])
 
+        # random wait time
+        import time
+        import random
+
+        time.sleep(random.randint(1, 30))
         container = client.containers.create(
             image=test_spec.instance_image_key,
             name=test_spec.get_instance_container_name(run_id),

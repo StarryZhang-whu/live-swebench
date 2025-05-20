@@ -68,6 +68,7 @@ def get_predictions_from_file(predictions_path: str, dataset_name: str, split: s
 
     # Validate that each prediction has an instance_id
     for pred in predictions:
+        pred[KEY_INSTANCE_ID] = pred[KEY_INSTANCE_ID].lower()
         if not isinstance(pred, dict):
             raise ValueError(f"Each prediction must be a dictionary, got {type(pred)}")
         if KEY_INSTANCE_ID not in pred:
